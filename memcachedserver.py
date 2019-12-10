@@ -1,39 +1,33 @@
 #!/usr/bin/env python3
 
 # Manage socket connections for telnet to use the memcached server
-import socketserver
+import asyncio
 
-class MyTCPHandler(socketserver.StreamRequestHandler):
-    """
-    The request handler class for our server.
+async def handleCommand(reader, writer):
+    while True:
+        try:
+            data = await reader.readline()
+            print("received: ", data)
+            if b'quit' in data:
+                break
+            writer.write(data + b'\r\n')
+            await writer.drain()
+        except:
+            print('Client closed connection without sending \'quit\' command')
+            break
 
-    It is instantiated once per connection to the server, and must
-    override the handle() method to implement communication to the
-    client.
-    """
 
-    def handle(self):
-        # self.rfile is a file-like object created by the handler;
-        # we can now use e.g. readline() instead of raw recv() calls
-        close = False
-        while not close:
-            self.data = self.rfile.readline().strip()
-            if not self.data:
-                # EOF, client closed, just return
-                return
-            print("{} wrote:".format(self.client_address[0]))
-            print(self.data)
-            # Likewise, self.wfile is a file-like object used to write back
-            # to the client
-            self.data += b'\n'
-            self.wfile.write(self.data.upper())
-            if b'quit' in self.data:
-                close = True
+    writer.close()
 
-if __name__ == "__main__":
-    HOST, PORT = "localhost", 11211
-    # Create the server, binding to localhost on port 11211
-    with socketserver.TCPServer((HOST, PORT), MyTCPHandler) as server:
-        # Activate the server; this will keep running until you
-        # interrupt the program with Ctrl-C
-        server.serve_forever()
+async def main():
+    server = await asyncio.start_server(
+    handleCommand, '127.0.0.1', 11211)
+
+    addr = server.sockets[0].getsockname()
+    print(f'Serving on {addr}')
+
+    async with server:
+        await server.serve_forever()
+
+if __name__ == '__main__':
+    asyncio.run(main())
