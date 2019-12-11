@@ -9,14 +9,17 @@ class MemcachedServer(asyncio.Protocol):
     """
     TIMEOUT = 10 # Seconds
     CLIENT_ERROR_FORMATTING_SET = b'CLIENT_ERROR incorrect # of arguments for set command\r\n'
+    CLIENT_ERROR_FORMATTING_SET_NOREPLY = b'CLIENT_ERROR incorrect 6th argument to set command. Expected \'noreply\'\r\n'
+    CLIENT_ERROR_FORMATTING_SET_KEY_LENGTH_TOO_LONG = b'CLIENT_ERROR key length of set command exceeds 250 characters'
     CLIENT_ERROR_FORMATTING_GET = b'CLIENT_ERROR incorrect # of arguments for get command\r\n'
     CLIENT_ERROR_FORMATTING_DELETE = b'CLIENT_ERROR incorrect # of arguments for delete command\r\n'
+    CLIENT_ERROR_FORMATTING_DELETE_NOREPLY = b'CLIENT_ERROR incorrect 3rd argument to set command. Expected \'noreply\'\r\n'
 
     def __init__(self):
         """Timeout implementation to limit client connections that are not going to provide input
         Also sets a flag that will be usec to receive data blocks on set commands
         """
-        self.expectingDataBlock = False
+        self.expectingDataBlock = None
         try:
             loop = asyncio.get_running_loop()
             self.timeout_handle = loop.call_later(self.TIMEOUT, self._timeout)
@@ -25,55 +28,76 @@ class MemcachedServer(asyncio.Protocol):
 
     def connection_made(self, transport):
         """Method called when a client connection is made
-        Arg(s): transport -> transport object representing the connection to the client
+        :param transport: object representing the connection to the client
+        :no return:
         """
         self.transport = transport
 
     def connection_lost(self, exc):
         """Method called when connection with client is closed
-        Arg(s): exc -> Python exception or None if connection closed by server
+        :param exc: Python exception or None if connection closed by server
+        :no return:
         """
         if exc is not None:
             self.transport.close()
 
     def data_received(self, data):
         """Method called when data received from client
-        Arg(s): data -> bytestring from client
-        No Return
+        :param data: bytestring from client
+        :no return:
         """
         self.timeout_handle.cancel()
         self.handleReceivedData(data)
 
     def handleReceivedData(self, data):
         """Decisioning method for deciphering commands and client errors
-        Arg(s): data -> bytestring of input
-        No return
+        :param data: bytestring of input
+        :no return:
         """
-        print(b'received: ' + data)
-        commandParams = data.split()
-        print(commandParams)
+        # print(b'received: ' + data)
 
-        if len(commandParams) == 0:
-            return
-
-        if commandParams[0] == b'quit':
-            self.transport.close()
-        elif commandParams[0] == b'set':
-            if len(commandParams) < 5 or len(commandParams) > 6:
-                # TODO: write to client instead of returning
-                return self.CLIENT_ERROR_FORMATTING_SET
-            self.expectingDataBlock = True
-        elif commandParams[0] == b'get':
-            if len(commandParams) < 2:
-                # TODO: write to client instead of returning
-                return self.CLIENT_ERROR_FORMATTING_GET
-        elif commandParams[0] == b'delete':
-            if len(commandParams) < 2 or len(commandParams) > 3:
-                # TODO: write to client instead of returning
-                return self.CLIENT_ERROR_FORMATTING_DELETE
+        if self.expectingDataBlock:
+            self.setKeyData(data)
         else:
-            # TODO: write to client instead of returning
-            return b'ERROR\r\n'
+            commandParams = data.split()
+            # print(commandParams)
+            if len(commandParams) == 0:
+                self.transport.write(b'ERROR\r\n')
+
+            if commandParams[0] == b'quit':
+                self.transport.close()
+            elif commandParams[0] == b'set':
+                if len(commandParams) < 5 or len(commandParams) > 6:
+                    self.transport.write(self.CLIENT_ERROR_FORMATTING_SET)
+                elif len(commandParams) == 6 and commandParams[5] != b'noreply':
+                    self.transport.write(self.CLIENT_ERROR_FORMATTING_SET_NOREPLY)
+                elif len(commandParams[1]) > 250:
+                    self.transport.write(self.CLIENT_ERROR_FORMATTING_SET_KEY_LENGTH_TOO_LONG)
+                else:
+                    self.expectingDataBlock = commandParams
+            elif commandParams[0] == b'get':
+                if len(commandParams) < 2:
+                    self.transport.write(self.CLIENT_ERROR_FORMATTING_GET)
+                else:
+                    self.getKeyData(commandParams)
+            elif commandParams[0] == b'delete':
+                if len(commandParams) < 2 or len(commandParams) > 3:
+                    self.transport.write(self.CLIENT_ERROR_FORMATTING_DELETE)
+                elif len(commandParams) == 3 and commandParams[2] != b'noreply':
+                    self.transport.write(self.CLIENT_ERROR_FORMATTING_DELETE_NOREPLY)
+                else:
+                    self.deleteKeyData(commandParams)
+            else:
+                self.transport.write(b'ERROR\r\n')
+
+    def setKeyData(self, dataBlock):
+        pass
+
+    def getKeyData(self, commandParams):
+        pass
+
+    def deleteKeyData(self, commandParams):
+        pass
 
     def _timeout(self):
         """Method to close transport connection if timeout condition is met
