@@ -3,8 +3,7 @@
 # Running both servers in the same process
 import subprocess
 
-# Handle the task of getting the absolute path for the subprocesses
-import glob
+# Handle the task of getting the absolute path for the current working directory
 import os.path
 
 # Handle command line arguments
@@ -43,13 +42,13 @@ def create_table(conn, create_table_sql):
 
 def main():
     parser = argparse.ArgumentParser(description='Start the memcached and front end servers')
-    parser.add_argument('database', metavar='database', type=str,
-                        help='the database for the memcached server')
+    parser.add_argument('databaseFile', metavar='databaseFile', type=str,
+                        help='the database file for the memcached server')
 
     args = parser.parse_args()
 
     cwd = os.path.abspath(os.path.join(os.path.dirname(__file__)))
-    database = cwd+'/'+args.database
+    databaseFile = cwd+'/'+args.databaseFile
 
     sql_create_keys_table = """ CREATE TABLE IF NOT EXISTS projects (
                                     key text PRIMARY KEY,
@@ -59,7 +58,7 @@ def main():
                                 ); """
 
     # create a database connection
-    conn = create_connection(database)
+    conn = create_connection(databaseFile)
 
     # create tables
     if conn is not None:
@@ -71,14 +70,14 @@ def main():
 
     try:
         subprocess.Popen(('python3',
-            'frontendserver.py'), cwd=cwd)
+            'frontendserver.py', databaseFile), cwd=cwd)
     except IndexError:
         print('Cannot find frontendserver.py')
         sys.exit(1)
 
     try:
         subprocess.Popen(('python3',
-            'memcachedserver.py'), cwd=cwd)
+            'memcachedserver.py', databaseFile), cwd=cwd)
     except IndexError:
         print('Cannot find memcachedserver.py')
         sys.exit(1)

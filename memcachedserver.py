@@ -3,6 +3,16 @@
 # Manage socket connections for telnet to use the memcached server
 import asyncio
 
+# Handle the task of getting the absolute path for the current working directory
+import os.path
+
+# Handle command line arguments
+import argparse
+
+# Sqlite
+import sqlite3
+from sqlite3 import Error
+
 class MemcachedServer(asyncio.Protocol):
     """Implementation of the Memcached Protocol with Asyncio
     Static variables are for constants
@@ -107,8 +117,19 @@ class MemcachedServer(asyncio.Protocol):
 async def main(host, port):
     """Main method to bind Memcached asyncio.Protocol implementation to asyncio event loop
     """
+
+    parser = argparse.ArgumentParser(description='Start the memcached server')
+    parser.add_argument('databaseFile', metavar='databaseFile', type=str,
+                        help='the database file for the memcached server')
+
+    args = parser.parse_args()
+
+    cwd = os.path.abspath(os.path.join(os.path.dirname(__file__)))
+    databaseFile = cwd+'/'+args.databaseFile
+    print('memcached: ', databaseFile)
+
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(MemcachedServer, host, port)
+    server = await loop.create_server(lambda: MemcachedServer(databaseFile), host, port)
     async with server:
         await server.serve_forever()
 
