@@ -25,10 +25,17 @@ class MemcachedServer(asyncio.Protocol):
     CLIENT_ERROR_FORMATTING_DELETE = b'CLIENT_ERROR incorrect # of arguments for delete command\r\n'
     CLIENT_ERROR_FORMATTING_DELETE_NOREPLY = b'CLIENT_ERROR incorrect 3rd argument to set command. Expected \'noreply\'\r\n'
 
-    def __init__(self):
+    SERVER_ERROR_SET_FAILURE = b'SERVER_ERROR error storing data\r\n'
+
+    SET_SUCCESS = b'STORED\r\n'
+
+    def __init__(self, databaseFile):
         """Timeout implementation to limit client connections that are not going to provide input
         Also sets a flag that will be usec to receive data blocks on set commands
+        :param databaseFile: full path to a sqlite database file
+        :no return:
         """
+        self.databaseFile = databaseFile
         self.expectingDataBlock = None
         try:
             loop = asyncio.get_running_loop()
@@ -36,12 +43,26 @@ class MemcachedServer(asyncio.Protocol):
         except RuntimeError:
             print(self.__class__.__name__, ' is being instantiated without a running event loop')
 
+    def create_sqlite_connection(self):
+        """ create a database connection to the SQLite database
+            specified by the class's self.databaseFile variable
+        :return: Connection object or None
+        """
+        connection = None
+        try:
+            connection = sqlite3.connect(self.databaseFile)
+        except Error as error:
+            print(error)
+
+        return connection
+
     def connection_made(self, transport):
         """Method called when a client connection is made
         :param transport: object representing the connection to the client
         :no return:
         """
         self.transport = transport
+        self.sqliteConnection = self.create_sqlite_connection()
 
     def connection_lost(self, exc):
         """Method called when connection with client is closed
@@ -70,9 +91,10 @@ class MemcachedServer(asyncio.Protocol):
             self.setKeyData(data)
         else:
             commandParams = data.split()
-            # print(commandParams)
+            print(commandParams)
             if len(commandParams) == 0:
                 self.transport.write(b'ERROR\r\n')
+                return
 
             if commandParams[0] == b'quit':
                 self.transport.close()
@@ -101,7 +123,23 @@ class MemcachedServer(asyncio.Protocol):
                 self.transport.write(b'ERROR\r\n')
 
     def setKeyData(self, dataBlock):
-        pass
+        sqliteCursor = self.sqliteConnection.cursor()
+        values = (
+                    self.expectingDataBlock[1].decode(),
+                    self.expectingDataBlock[2].decode(),
+                    self.expectingDataBlock[4].decode(),
+                    dataBlock.strip()[:int(self.expectingDataBlock[4].decode())].decode()
+                )
+        insertOrReplace = """ INSERT OR REPLACE INTO keysTable(key, flags, bytes, dataBlock) VALUES (?, ?, ?, ?) """
+        try:
+            sqliteCursor.execute(insertOrReplace, values)
+            self.sqliteConnection.commit()
+            self.transport.write(self.SET_SUCCESS)
+        except Exception as error:
+            print(error)
+            self.transport.write(self.SERVER_ERROR_SET_FAILURE)
+
+        self.expectingDataBlock = None
 
     def getKeyData(self, commandParams):
         pass

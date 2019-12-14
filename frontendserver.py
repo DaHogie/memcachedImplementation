@@ -27,6 +27,42 @@ def hello():
     return render_template('monitoring_page.html', message=message)
 
 
+def create_connection(db_file):
+    """ create a database connection to the SQLite database
+        specified by db_file
+    :param db_file: database file
+    :return: Connection object or None
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_file)
+        return conn
+    except Error as e:
+        print(e)
+
+    return conn
+
+def getAllKeys(db_file):
+    """ get all rows from the keysTable in the SQLite database
+        specified by db_file
+    :param db_file: database file
+    """
+    connection = create_connection(db_file)
+    with connection:
+        selectAllQuery = """ SELECT * FROM keysTable """
+
+        cursor = connection.cursor()
+        try:
+            cursor.execute(selectAllQuery)
+        except Exception as error:
+            print(error)
+
+        rows = cursor.fetchall()
+
+        for row in rows:
+            print(row)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Start the memcached and front end servers')
     parser.add_argument('databaseFile', metavar='databaseFile', type=str,
@@ -39,7 +75,9 @@ def main():
 
     print('frontEndServer: ', databaseFile)
 
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    getAllKeys(databaseFile)
+
+    # app.run(debug=True, host='0.0.0.0', port=8000)
 
 if __name__ == "__main__":
     main()

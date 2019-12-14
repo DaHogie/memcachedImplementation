@@ -50,7 +50,7 @@ def main():
     cwd = os.path.abspath(os.path.join(os.path.dirname(__file__)))
     databaseFile = cwd+'/'+args.databaseFile
 
-    sql_create_keys_table = """ CREATE TABLE IF NOT EXISTS projects (
+    sql_create_keys_table = """ CREATE TABLE IF NOT EXISTS keysTable (
                                     key text PRIMARY KEY,
                                     flags integer NOT NULL,
                                     bytes integer,
@@ -70,14 +70,14 @@ def main():
 
     try:
         subprocess.Popen(('python3',
-            'frontendserver.py', databaseFile), cwd=cwd)
+            'frontendserver.py', args.databaseFile), cwd=cwd)
     except IndexError:
         print('Cannot find frontendserver.py')
         sys.exit(1)
 
     try:
         subprocess.Popen(('python3',
-            'memcachedserver.py', databaseFile), cwd=cwd)
+            'memcachedserver.py', args.databaseFile), cwd=cwd)
     except IndexError:
         print('Cannot find memcachedserver.py')
         sys.exit(1)
