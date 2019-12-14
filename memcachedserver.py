@@ -26,6 +26,7 @@ class MemcachedServer(asyncio.Protocol):
     CLIENT_ERROR_FORMATTING_DELETE_NOREPLY = b'CLIENT_ERROR incorrect 3rd argument to set command. Expected \'noreply\'\r\n'
 
     SERVER_ERROR_SET_FAILURE = b'SERVER_ERROR error storing data\r\n'
+    SERVER_ERROR_GET_FAILURE = b'SERVER_ERROR error retrieving stored data\r\n'
 
     SET_SUCCESS = b'STORED\r\n'
 
@@ -123,7 +124,6 @@ class MemcachedServer(asyncio.Protocol):
                 self.transport.write(b'ERROR\r\n')
 
     def setKeyData(self, dataBlock):
-        sqliteCursor = self.sqliteConnection.cursor()
         values = (
                     self.expectingDataBlock[1].decode(),
                     self.expectingDataBlock[2].decode(),
@@ -132,6 +132,7 @@ class MemcachedServer(asyncio.Protocol):
                 )
         insertOrReplace = """ INSERT OR REPLACE INTO keysTable(key, flags, bytes, dataBlock) VALUES (?, ?, ?, ?) """
         try:
+            sqliteCursor = self.sqliteConnection.cursor()
             sqliteCursor.execute(insertOrReplace, values)
             self.sqliteConnection.commit()
             self.transport.write(self.SET_SUCCESS)
@@ -142,7 +143,25 @@ class MemcachedServer(asyncio.Protocol):
         self.expectingDataBlock = None
 
     def getKeyData(self, commandParams):
-        pass
+        interpolationCount = len(commandParams) - 1
+        interpolationString = "?," * (len(commandParams) - 2) + "?"
+        selectQuery = """ SELECT * FROM keysTable WHERE key IN ({}) """.format(interpolationString)
+
+        keys = tuple(commandParams[i].decode() for i in range(1, len(commandParams)))
+        try:
+            sqliteCursor = self.sqliteConnection.cursor()
+            sqliteCursor.execute(selectQuery, keys)
+
+            rows = sqliteCursor.fetchall()
+            for row in rows:
+                self.transport.write(b'VALUE ' + row[0].encode('utf-8') + b' ' + str(row[1]).encode('utf-8') + b' ' + str(row[2]).encode('utf-8') + b'\r\n')
+                self.transport.write(row[3].encode('utf-8') + b'\r\n')
+
+            self.transport.write(b'END\r\n')
+        except Exception as error:
+            print(error)
+            self.transport.write(self.SERVER_ERROR_SET_FAILURE)
+
 
     def deleteKeyData(self, commandParams):
         pass
