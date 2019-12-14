@@ -27,8 +27,12 @@ class MemcachedServer(asyncio.Protocol):
 
     SERVER_ERROR_SET_FAILURE = b'SERVER_ERROR error storing data\r\n'
     SERVER_ERROR_GET_FAILURE = b'SERVER_ERROR error retrieving stored data\r\n'
+    SERVER_ERROR_DELETE_FAILURE = b'SERVER_ERROR error deleting stored data\r\n'
 
     SET_SUCCESS = b'STORED\r\n'
+    DELETE_SUCCESS = b'DELETED\r\n'
+
+    END = b'END\r\n'
 
     def __init__(self, databaseFile):
         """Timeout implementation to limit client connections that are not going to provide input
@@ -157,14 +161,26 @@ class MemcachedServer(asyncio.Protocol):
                 self.transport.write(b'VALUE ' + row[0].encode('utf-8') + b' ' + str(row[1]).encode('utf-8') + b' ' + str(row[2]).encode('utf-8') + b'\r\n')
                 self.transport.write(row[3].encode('utf-8') + b'\r\n')
 
-            self.transport.write(b'END\r\n')
+            self.transport.write(self.END)
         except Exception as error:
             print(error)
-            self.transport.write(self.SERVER_ERROR_SET_FAILURE)
+            self.transport.write(self.SERVER_ERROR_GET_FAILURE)
 
 
     def deleteKeyData(self, commandParams):
-        pass
+        deleteQuery = """ DELETE FROM keysTable WHERE key=? """
+
+        key = (commandParams[1].decode(),)
+        try:
+            sqliteCursor = self.sqliteConnection.cursor()
+            sqliteCursor.execute(deleteQuery, key)
+            self.sqliteConnection.commit()
+            print(sqliteCursor.lastrowid)
+
+            self.transport.write(self.DELETE_SUCCESS)
+        except Exception as error:
+            print(error)
+            self.transport.write(self.SERVER_ERROR_DELETE_FAILURE)
 
     def _timeout(self):
         """Method to close transport connection if timeout condition is met
