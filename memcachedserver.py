@@ -32,6 +32,8 @@ class MemcachedServer(asyncio.Protocol):
     SET_SUCCESS = b'STORED\r\n'
     DELETE_SUCCESS = b'DELETED\r\n'
 
+    DELETE_NOT_FOUND = b'NOT FOUND\r\n'
+
     END = b'END\r\n'
 
     def __init__(self, databaseFile):
@@ -139,7 +141,8 @@ class MemcachedServer(asyncio.Protocol):
             sqliteCursor = self.sqliteConnection.cursor()
             sqliteCursor.execute(insertOrReplace, values)
             self.sqliteConnection.commit()
-            self.transport.write(self.SET_SUCCESS)
+            if len(self.expectingDataBlock) < 6:
+                self.transport.write(self.SET_SUCCESS)
         except Exception as error:
             print(error)
             self.transport.write(self.SERVER_ERROR_SET_FAILURE)
@@ -175,9 +178,13 @@ class MemcachedServer(asyncio.Protocol):
             sqliteCursor = self.sqliteConnection.cursor()
             sqliteCursor.execute(deleteQuery, key)
             self.sqliteConnection.commit()
-            print(sqliteCursor.lastrowid)
+            print(sqliteCursor.rowcount)
 
-            self.transport.write(self.DELETE_SUCCESS)
+            if len(commandParams) < 3:
+                if sqliteCursor.rowcount > 0:
+                    self.transport.write(self.DELETE_SUCCESS)
+                else:
+                    self.transport.write(self.DELETE_NOT_FOUND)
         except Exception as error:
             print(error)
             self.transport.write(self.SERVER_ERROR_DELETE_FAILURE)
