@@ -17,11 +17,16 @@ class MemcachedServer(asyncio.Protocol):
     """Implementation of the Memcached Protocol with Asyncio
     Static variables are for constants
     """
-    TIMEOUT = 10 # Seconds
+    TIMEOUT = 60 # Seconds
     CLIENT_ERROR_FORMATTING_SET = b'CLIENT_ERROR incorrect # of arguments for set command\r\n'
     CLIENT_ERROR_FORMATTING_SET_NOREPLY = b'CLIENT_ERROR incorrect 6th argument to set command. Expected \'noreply\'\r\n'
-    CLIENT_ERROR_FORMATTING_SET_KEY_LENGTH_TOO_LONG = b'CLIENT_ERROR key length of set command exceeds 250 characters'
+    CLIENT_ERROR_FORMATTING_SET_KEY_LENGTH_TOO_LONG = b'CLIENT_ERROR key length of set command exceeds 250 characters\r\n'
+    CLIENT_ERROR_FORMATTING_SET_DATA_BLOCK = b'CLIENT_ERROR the data block does not match the # of bytes passed in the set command\r\n'
+    CLIENT_ERROR_FORMATTING_SET_NOT_NUMERIC_VALUES = b'CLIENT_ERROR at least one of the <flags> <exptime> <bytes> parameters contained one or more non-digit character\r\n'
+    CLIENT_ERROR_FORMATTING_SET_FLAGS_VALUE = b'CLIENT_ERROR the <flags> parameter is greater than the 16 bit unsigned maximum of 65535\r\n'
+
     CLIENT_ERROR_FORMATTING_GET = b'CLIENT_ERROR incorrect # of arguments for get command\r\n'
+
     CLIENT_ERROR_FORMATTING_DELETE = b'CLIENT_ERROR incorrect # of arguments for delete command\r\n'
     CLIENT_ERROR_FORMATTING_DELETE_NOREPLY = b'CLIENT_ERROR incorrect 3rd argument to set command. Expected \'noreply\'\r\n'
 
@@ -92,13 +97,11 @@ class MemcachedServer(asyncio.Protocol):
         :param data: bytestring of input
         :no return:
         """
-        # print(b'received: ' + data)
 
         if self.expectingDataBlock:
             self.setKeyData(data)
         else:
             commandParams = data.split()
-            print(commandParams)
             if len(commandParams) == 0:
                 self.transport.write(b'ERROR\r\n')
                 return
@@ -113,7 +116,19 @@ class MemcachedServer(asyncio.Protocol):
                 elif len(commandParams[1]) > 250:
                     self.transport.write(self.CLIENT_ERROR_FORMATTING_SET_KEY_LENGTH_TOO_LONG)
                 else:
-                    self.expectingDataBlock = commandParams
+                    try:
+                        flags = int(commandParams[2].decode())
+                        if flags > 65535:
+                            self.transport.write(self.CLIENT_ERROR_FORMATTING_SET_FLAGS_VALUE)
+                            return
+                        expTime = int(commandParams[3].decode())
+                        dataBlockBytes = int(commandParams[4].decode())
+                        if flags < 0 or expTime < 0 or dataBlockBytes < 0:
+                            raise ValueError('Negative numbers not allowed')
+                        self.expectingDataBlock = commandParams
+                    except Exception as error:
+                        print(error)
+                        self.transport.write(self.CLIENT_ERROR_FORMATTING_SET_NOT_NUMERIC_VALUES)
             elif commandParams[0] == b'get':
                 if len(commandParams) < 2:
                     self.transport.write(self.CLIENT_ERROR_FORMATTING_GET)
@@ -130,22 +145,25 @@ class MemcachedServer(asyncio.Protocol):
                 self.transport.write(b'ERROR\r\n')
 
     def setKeyData(self, dataBlock):
-        values = (
-                    self.expectingDataBlock[1].decode(),
-                    self.expectingDataBlock[2].decode(),
-                    self.expectingDataBlock[4].decode(),
-                    dataBlock.strip()[:int(self.expectingDataBlock[4].decode())].decode()
-                )
-        insertOrReplace = """ INSERT OR REPLACE INTO keysTable(key, flags, bytes, dataBlock) VALUES (?, ?, ?, ?) """
-        try:
-            sqliteCursor = self.sqliteConnection.cursor()
-            sqliteCursor.execute(insertOrReplace, values)
-            self.sqliteConnection.commit()
-            if len(self.expectingDataBlock) < 6:
-                self.transport.write(self.SET_SUCCESS)
-        except Exception as error:
-            print(error)
-            self.transport.write(self.SERVER_ERROR_SET_FAILURE)
+        if len(dataBlock)-2 != int(self.expectingDataBlock[4].decode()):
+            self.transport.write(self.CLIENT_ERROR_FORMATTING_SET_DATA_BLOCK)
+        else:
+            values = (
+                        self.expectingDataBlock[1].decode(),
+                        self.expectingDataBlock[2].decode(),
+                        self.expectingDataBlock[4].decode(),
+                        dataBlock.strip().decode()
+                    )
+            insertOrReplace = """ INSERT OR REPLACE INTO keysTable(key, flags, bytes, dataBlock) VALUES (?, ?, ?, ?) """
+            try:
+                sqliteCursor = self.sqliteConnection.cursor()
+                sqliteCursor.execute(insertOrReplace, values)
+                self.sqliteConnection.commit()
+                if len(self.expectingDataBlock) < 6:
+                    self.transport.write(self.SET_SUCCESS)
+            except Exception as error:
+                print(error)
+                self.transport.write(self.SERVER_ERROR_SET_FAILURE)
 
         self.expectingDataBlock = None
 
@@ -178,7 +196,6 @@ class MemcachedServer(asyncio.Protocol):
             sqliteCursor = self.sqliteConnection.cursor()
             sqliteCursor.execute(deleteQuery, key)
             self.sqliteConnection.commit()
-            print(sqliteCursor.rowcount)
 
             if len(commandParams) < 3:
                 if sqliteCursor.rowcount > 0:
@@ -195,7 +212,7 @@ class MemcachedServer(asyncio.Protocol):
         self.transport.close()
 
 async def main(host, port):
-    """Main method to bind Memcached asyncio.Protocol implementation to asyncio event loop
+    """Main method to bind Memcached asyncio.Protocol implementation to asyncio event loop and expose it to the network
     """
 
     parser = argparse.ArgumentParser(description='Start the memcached server')

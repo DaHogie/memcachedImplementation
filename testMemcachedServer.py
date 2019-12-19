@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 from memcachedserver import MemcachedServer
 import asyncio
 import sqlite3
@@ -10,15 +10,31 @@ class TestMemcachedServer(unittest.TestCase):
     # Static variables for response strings
     CLIENT_ERROR_FORMATTING_SET = b'CLIENT_ERROR incorrect # of arguments for set command\r\n'
     CLIENT_ERROR_FORMATTING_SET_NOREPLY = b'CLIENT_ERROR incorrect 6th argument to set command. Expected \'noreply\'\r\n'
+    CLIENT_ERROR_FORMATTING_SET_KEY_LENGTH_TOO_LONG = b'CLIENT_ERROR key length of set command exceeds 250 characters\r\n'
+    CLIENT_ERROR_FORMATTING_SET_DATA_BLOCK = b'CLIENT_ERROR the data block does not match the # of bytes passed in the set command\r\n'
+    CLIENT_ERROR_FORMATTING_SET_NOT_NUMERIC_VALUES = b'CLIENT_ERROR at least one of the <flags> <exptime> <bytes> parameters contained one or more non-digit character\r\n'
+    CLIENT_ERROR_FORMATTING_SET_FLAGS_VALUE = b'CLIENT_ERROR the <flags> parameter is greater than the 16 bit unsigned maximum of 65535\r\n'
+
     CLIENT_ERROR_FORMATTING_GET = b'CLIENT_ERROR incorrect # of arguments for get command\r\n'
+
     CLIENT_ERROR_FORMATTING_DELETE = b'CLIENT_ERROR incorrect # of arguments for delete command\r\n'
     CLIENT_ERROR_FORMATTING_DELETE_NOREPLY = b'CLIENT_ERROR incorrect 3rd argument to set command. Expected \'noreply\'\r\n'
 
-    INSERT_OR_REPLACE_SQL_QUERY = """ INSERT OR REPLACE INTO keysTable(key, flags, bytes, dataBlock) VALUES (?, ?, ?, ?) """
+    SERVER_ERROR_SET_FAILURE = b'SERVER_ERROR error storing data\r\n'
+    SERVER_ERROR_GET_FAILURE = b'SERVER_ERROR error retrieving stored data\r\n'
+    SERVER_ERROR_DELETE_FAILURE = b'SERVER_ERROR error deleting stored data\r\n'
 
     SET_SUCCESS = b'STORED\r\n'
+    DELETE_SUCCESS = b'DELETED\r\n'
 
-    TIMEOUT = 10
+    DELETE_NOT_FOUND = b'NOT FOUND\r\n'
+
+    END = b'END\r\n'
+
+    INSERT_OR_REPLACE_SQL_QUERY = """ INSERT OR REPLACE INTO keysTable(key, flags, bytes, dataBlock) VALUES (?, ?, ?, ?) """
+    DELETE_SQL_QUERY = """ DELETE FROM keysTable WHERE key=? """
+
+    TIMEOUT = 60
 
     def setUp(self):
         self.memCachedServer = MemcachedServer(None)
@@ -102,6 +118,30 @@ class TestMemcachedServer(unittest.TestCase):
         self.assertEqual(self.memCachedServer.expectingDataBlock, None)
         self.memCachedServer.transport.write.assert_called_with(self.CLIENT_ERROR_FORMATTING_SET_NOREPLY)
 
+    def testHandleReceivedDataSetFormattingFailDigitParameters(self):
+        self.assertEqual(self.memCachedServer.expectingDataBlock, None)
+        inputMessageDigitParametersFailures = [
+            b'set capitalOfChina 14.0 2400 16\r\n',
+            b'set capitalOfChina 14 2400.0 16\r\n',
+            b'set capitalOfChina 14 2400 16.0\r\n',
+            b'set capitalOfChina -14 2400 16\r\n',
+            b'set capitalOfChina 14 -2400 16\r\n',
+            b'set capitalOfChina 14 2400 -16\r\n'
+        ]
+        self.memCachedServer.transport.write = MagicMock()
+        for inputMessage in inputMessageDigitParametersFailures:
+            self.memCachedServer.handleReceivedData(inputMessage)
+            self.assertEqual(self.memCachedServer.expectingDataBlock, None)
+            self.memCachedServer.transport.write.assert_called_with(self.CLIENT_ERROR_FORMATTING_SET_NOT_NUMERIC_VALUES)
+
+    def testHandleReceivedDataSetFormattingFailFlagValue(self):
+        self.assertEqual(self.memCachedServer.expectingDataBlock, None)
+        self.memCachedServer.transport.write = MagicMock()
+        inputMessageFlagsValueFail = b'set capitalOfChina 67777 2400 16\r\n'
+        self.memCachedServer.handleReceivedData(inputMessageFlagsValueFail)
+        self.assertEqual(self.memCachedServer.expectingDataBlock, None)
+        self.memCachedServer.transport.write.assert_called_with(self.CLIENT_ERROR_FORMATTING_SET_FLAGS_VALUE)
+
     def testHandleReceivedDataGetFormattingCorrect(self):
         inputMessageCorrect = b'get capitalOfChina continentOfLatvia hemisphereOfBrasil'
         self.memCachedServer.getKeyData = MagicMock()
@@ -148,7 +188,6 @@ class TestMemcachedServer(unittest.TestCase):
         self.memCachedServer.transport.write.assert_called_with(self.CLIENT_ERROR_FORMATTING_DELETE_NOREPLY)
         self.memCachedServer.deleteKeyData.assert_not_called()
 
-
     def testSetKeyData(self):
         self.memCachedServer.expectingDataBlock = [b'set', b'capitalOfChina', b'14', b'2400', b'16']
         self.memCachedServer.sqliteConnection.commit = MagicMock()
@@ -156,11 +195,27 @@ class TestMemcachedServer(unittest.TestCase):
         cursor = lambda: None
         cursor.execute = MagicMock()
         self.memCachedServer.sqliteConnection.cursor = MagicMock(return_value=cursor)
-        self.memCachedServer.setKeyData(b'the data block\r\n')
-        sqlQueryValues = ('capitalOfChina', '14', '16', 'the data block')
+        self.memCachedServer.setKeyData(b'the data block!!\r\n')
+        sqlQueryValues = ('capitalOfChina', '14', '16', 'the data block!!')
         cursor.execute.assert_called_with(self.INSERT_OR_REPLACE_SQL_QUERY, sqlQueryValues)
+        self.memCachedServer.sqliteConnection.cursor.assert_called()
         self.memCachedServer.sqliteConnection.commit.assert_called()
         self.memCachedServer.transport.write.assert_called_with(self.SET_SUCCESS)
+        self.assertEqual(self.memCachedServer.expectingDataBlock, None)
+
+    def testSetKeyDataNoReply(self):
+        self.memCachedServer.expectingDataBlock = [b'set', b'capitalOfChina', b'14', b'2400', b'16', b'noreply']
+        self.memCachedServer.sqliteConnection.commit = MagicMock()
+        self.memCachedServer.transport.write = MagicMock()
+        cursor = lambda: None
+        cursor.execute = MagicMock()
+        self.memCachedServer.sqliteConnection.cursor = MagicMock(return_value=cursor)
+        self.memCachedServer.setKeyData(b'the data block!!\r\n')
+        sqlQueryValues = ('capitalOfChina', '14', '16', 'the data block!!')
+        cursor.execute.assert_called_with(self.INSERT_OR_REPLACE_SQL_QUERY, sqlQueryValues)
+        self.memCachedServer.sqliteConnection.cursor.assert_called()
+        self.memCachedServer.sqliteConnection.commit.assert_called()
+        self.memCachedServer.transport.write.assert_not_called()
         self.assertEqual(self.memCachedServer.expectingDataBlock, None)
 
     def testSetKeyDataStorageError(self):
@@ -170,8 +225,110 @@ class TestMemcachedServer(unittest.TestCase):
         cursor = lambda: None
         cursor.execute = lambda x, y: 1/0
         self.memCachedServer.sqliteConnection.cursor = MagicMock(return_value=cursor)
-        self.memCachedServer.setKeyData(b'the data block\r\n')
-        sqlQueryValues = ('capitalOfChina', '14', '16', 'the data block')
+        self.memCachedServer.setKeyData(b'the data block!!\r\n')
         self.memCachedServer.sqliteConnection.commit.assert_not_called()
-        self.memCachedServer.transport.write.assert_called_with(self.memCachedServer.SERVER_ERROR_SET_FAILURE)
+        self.memCachedServer.transport.write.assert_called_with(self.SERVER_ERROR_SET_FAILURE)
         self.assertEqual(self.memCachedServer.expectingDataBlock, None)
+
+    def testSetKeyDataIncorrectDataBlockLength(self):
+        self.memCachedServer.expectingDataBlock = [b'set', b'capitalOfChina', b'14', b'2400', b'16']
+        self.memCachedServer.sqliteConnection.commit = MagicMock()
+        self.memCachedServer.transport.write = MagicMock()
+        cursor = lambda: None
+        cursor.execute = MagicMock()
+        self.memCachedServer.sqliteConnection.cursor = MagicMock(return_value=cursor)
+        self.memCachedServer.setKeyData(b'the data block\r\n')
+        cursor.execute.assert_not_called()
+        self.memCachedServer.sqliteConnection.cursor.assert_not_called()
+        self.memCachedServer.sqliteConnection.commit.assert_not_called()
+        self.memCachedServer.transport.write.assert_called_with(self.CLIENT_ERROR_FORMATTING_SET_DATA_BLOCK)
+        self.assertEqual(self.memCachedServer.expectingDataBlock, None)
+
+
+    def testGetKeyData(self):
+        selectQueryString = """ SELECT * FROM keysTable WHERE key IN (?,?,?) """
+        self.memCachedServer.transport.write = MagicMock()
+        cursor = lambda: None
+        cursor.execute = MagicMock()
+        cursor.fetchall = MagicMock(return_value=[('manchesterUnited', 1, 7, 'Ronaldo'),('capitalOfChina', 2, 7, 'Beijing'),('biggestOcean', 4, 7, 'Pacific')])
+        self.memCachedServer.sqliteConnection.cursor = MagicMock(return_value=cursor)
+        self.memCachedServer.getKeyData([b'get', b'manchesterUnited', b'capitalOfChina', b'biggestOcean'])
+        sqlQueryValues = ('manchesterUnited', 'capitalOfChina', 'biggestOcean')
+        self.memCachedServer.sqliteConnection.cursor.assert_called()
+        cursor.execute.assert_called_with(selectQueryString, sqlQueryValues)
+        cursor.fetchall.assert_called()
+        writeCalls = [
+            call(b'VALUE manchesterUnited 1 7\r\n'),
+            call(b'Ronaldo\r\n'),
+            call(b'VALUE capitalOfChina 2 7\r\n'),
+            call(b'Beijing\r\n'),
+            call(b'VALUE biggestOcean 4 7\r\n'),
+            call(b'Pacific\r\n'),
+            call(b'END\r\n')
+        ]
+        self.assertEqual(self.memCachedServer.transport.write.mock_calls, writeCalls)
+
+
+    def testGetKeyDataStorageError(self):
+        self.memCachedServer.transport.write = MagicMock()
+        cursor = lambda: None
+        cursor.execute = lambda x, y: 1/0
+        cursor.fetchall = MagicMock(return_value=[('manchesterUnited', 1, 7, 'Ronaldo'),('capitalOfChina', 2, 7, 'Beijing'),('biggestOcean', 4, 7, 'Pacific')])
+        self.memCachedServer.sqliteConnection.cursor = MagicMock(return_value=cursor)
+        self.memCachedServer.getKeyData([b'get', b'manchesterUnited', b'capitalOfChina', b'biggestOcean'])
+        self.memCachedServer.sqliteConnection.cursor.assert_called()
+        cursor.fetchall.assert_not_called()
+        self.memCachedServer.transport.write.assert_called_with(self.SERVER_ERROR_GET_FAILURE)
+
+    def testDeleteKeyDataKeyFound(self):
+        deleteQuery = self.DELETE_SQL_QUERY
+        self.memCachedServer.transport.write = MagicMock()
+        self.memCachedServer.sqliteConnection.commit = MagicMock()
+        cursor = lambda: None
+        cursor.execute = MagicMock()
+        cursor.rowcount = 1
+        self.memCachedServer.sqliteConnection.cursor = MagicMock(return_value=cursor)
+        self.memCachedServer.deleteKeyData([b'delete', b'manchesterUnited'])
+        sqlQueryValue = ('manchesterUnited',)
+        cursor.execute.assert_called_with(deleteQuery, sqlQueryValue)
+        self.memCachedServer.sqliteConnection.commit.assert_called()
+        self.memCachedServer.transport.write.assert_called_with(self.DELETE_SUCCESS)
+
+    def testDeleteKeyDataKeyNotFound(self):
+        deleteQuery = self.DELETE_SQL_QUERY
+        self.memCachedServer.transport.write = MagicMock()
+        self.memCachedServer.sqliteConnection.commit = MagicMock()
+        cursor = lambda: None
+        cursor.execute = MagicMock()
+        cursor.rowcount = 0
+        self.memCachedServer.sqliteConnection.cursor = MagicMock(return_value=cursor)
+        self.memCachedServer.deleteKeyData([b'delete', b'manchesterUnited'])
+        sqlQueryValue = ('manchesterUnited',)
+        cursor.execute.assert_called_with(deleteQuery, sqlQueryValue)
+        self.memCachedServer.sqliteConnection.commit.assert_called()
+        self.memCachedServer.transport.write.assert_called_with(self.DELETE_NOT_FOUND)
+
+    def testDeleteKeyDataNoReply(self):
+        deleteQuery = self.DELETE_SQL_QUERY
+        self.memCachedServer.transport.write = MagicMock()
+        self.memCachedServer.sqliteConnection.commit = MagicMock()
+        cursor = lambda: None
+        cursor.execute = MagicMock()
+        cursor.rowcount = 0
+        self.memCachedServer.sqliteConnection.cursor = MagicMock(return_value=cursor)
+        self.memCachedServer.deleteKeyData([b'delete', b'manchesterUnited', b'noreply'])
+        sqlQueryValue = ('manchesterUnited',)
+        cursor.execute.assert_called_with(deleteQuery, sqlQueryValue)
+        self.memCachedServer.sqliteConnection.commit.assert_called()
+        self.memCachedServer.transport.write.assert_not_called()
+
+    def testDeleteKeyStorageError(self):
+        self.memCachedServer.transport.write = MagicMock()
+        self.memCachedServer.sqliteConnection.commit = MagicMock()
+        cursor = lambda: None
+        cursor.execute = lambda x, y: 1/0
+        self.memCachedServer.sqliteConnection.cursor = MagicMock(return_value=cursor)
+        self.memCachedServer.deleteKeyData([b'delete', b'manchesterUnited', b'noreply'])
+        self.memCachedServer.sqliteConnection.cursor.assert_called()
+        self.memCachedServer.sqliteConnection.commit.assert_not_called()
+        self.memCachedServer.transport.write.assert_called_with(self.SERVER_ERROR_DELETE_FAILURE)
