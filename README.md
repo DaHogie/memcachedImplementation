@@ -39,6 +39,10 @@ Otherwise the memcached protocol will throw a *CLIENT_ERROR*.
 
 ### Memcached Server Testing
 
-You can test the memcached server by connecting to it with telnet.
+There are full automated unit tests for the memcached server in this code base. Simply run
+`python3 -m unittest` and the test suite will make sure the memcached server implemenation is
+taken care of.
+
+You can also test the memcached server manually by connecting to it with telnet.
 If no commands are received within the first minute of the initial connection the server will
 timeout the client and disconnect.
