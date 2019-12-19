@@ -1,6 +1,6 @@
 # Memcached Protocol Implementation
 
-This is a simple implementation of the (memcached protocol)[https://github.com/memcached/memcached/blob/master/doc/protocol.txt].
+This is a simple implementation of the [memcached protocol](https://github.com/memcached/memcached/blob/master/doc/protocol.txt).
 The `main.py` file takes in a required argument that is the name of a sqlite file in the same directory.
 It will then start two subprocesses that run the memcached server on port 11211 and the monitoring UI server on port 8000.
 The memcached server was implemented with the asyncio library; specifically with a child object of the asyncio.Protocol object.
@@ -10,7 +10,7 @@ The front end server was implemented with Flask, HTML5, CSS (Grid and Flexbox), 
 
 1. Python3 will need to be installed on your machine.
 2. Flask will need to be installed with pip3 to run the front end server.
-3. CSS Grid is used on the UI so if you're viewing the site with Chrome you'll need to enable the `Experimental Web Platform Features` flag. See (Browser Support)[https://www.lambdatest.com/css-grid-layout] for more info.
+3. CSS Grid is used on the UI so if you're viewing the site with Chrome you'll need to enable the `Experimental Web Platform Features` flag. See [Browser Support](https://www.lambdatest.com/css-grid-layout) for more info.
 
 ## Start Command
 
@@ -21,7 +21,7 @@ python3 interpreter is chosen if possible.
 ## Commands Implemented
 
 Implemented `set`, `get`, and `delete` from the Memcached Protocol.
-View the (Memcached Protocol Reference)[https://github.com/memcached/memcached/blob/master/doc/protocol.txt] for more info.
+View the [Memcached Protocol Reference](https://github.com/memcached/memcached/blob/master/doc/protocol.txt) for more info.
 
 ### Special Notes
 
