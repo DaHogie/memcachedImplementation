@@ -20,60 +20,11 @@ from flask import render_template
 app = Flask(__name__)
 app.config['ENV'] = 'development'
 
-# a route where we will display a welcome message via an HTML template
+# Route to serve the HTML file with inserted keyValue pairs to be used by the React Javascript
 @app.route("/")
 def hello():
-    keys = [
-        {
-            'keyName': 'china',
-            'value': 'great food',
-        },
-        {
-            'keyName': 'england',
-            'value': 'football'
-        },
-        {
-            'keyName': 'russia',
-            'value': 'cold'
-        },
-        {
-            'keyName': 'spain',
-            'value': 'matador'
-        },
-        {
-            'keyName': 'china',
-            'value': 'great food',
-        },
-        {
-            'keyName': 'england',
-            'value': 'football'
-        },
-        {
-            'keyName': 'russia',
-            'value': 'cold'
-        },
-        {
-            'keyName': 'spain',
-            'value': 'matador'
-        },
-        {
-            'keyName': 'china',
-            'value': 'great food',
-        },
-        {
-            'keyName': 'england',
-            'value': 'football'
-        },
-        {
-            'keyName': 'russia',
-            'value': 'cold'
-        },
-        {
-            'keyName': 'spain',
-            'value': 'matador'
-        },
-    ]
-    print(app.config['DATABASE_FILE'])
+    databaseRows = getAllKeys(app.config['DATABASE_FILE'])
+    keys = [{ 'keyName': row[0], 'value': row[3]} for row in databaseRows]
     return render_template('monitoring_page.html', keys=keys)
 
 
@@ -112,6 +63,8 @@ def getAllKeys(db_file):
         for row in rows:
             print(row)
 
+        return rows
+
 
 def main():
     parser = argparse.ArgumentParser(description='Start the memcached and front end servers')
@@ -122,8 +75,6 @@ def main():
 
     cwd = os.path.abspath(os.path.join(os.path.dirname(__file__)))
     databaseFile = cwd+'/'+args.databaseFile
-
-    print('frontEndServer: ', databaseFile)
 
     getAllKeys(databaseFile)
 
