@@ -60,9 +60,6 @@ def getAllKeys(db_file):
 
         rows = cursor.fetchall()
 
-        for row in rows:
-            print(row)
-
         return rows
 
 
@@ -76,10 +73,8 @@ def main():
     cwd = os.path.abspath(os.path.join(os.path.dirname(__file__)))
     databaseFile = cwd+'/'+args.databaseFile
 
-    getAllKeys(databaseFile)
-
     app.config['DATABASE_FILE'] = databaseFile
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    app.run(debug=False, host='0.0.0.0', port=8000)
 
 if __name__ == "__main__":
     main()

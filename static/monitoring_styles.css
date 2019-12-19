@@ -11,17 +11,6 @@ body {
     line-height: 1.5;
 
     text-align: center;
-
-    --header-font-size: 2.5em;
-    --content-font-size: 1em;
-}
-
-ul {
-    list-style: none;
-}
-
-li {
-    margin-bottom: 5em;
 }
 
 .grid-container {
@@ -36,8 +25,20 @@ li {
 }
 
 .header {
+    display: flex;
     background: #115C58;
     grid-area: header;
+    justify-content: center;
+    align-items: flex-start;
+    flex-direction: column;
+}
+
+.header h1 {
+    margin: 15px 0 0 30px;
+}
+
+.header p {
+    margin: 0 0 15px 30px;
 }
 
 .key-list {
@@ -46,8 +47,45 @@ li {
     overflow-y: auto;
 }
 
+.key-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.list-item {
+    border-bottom: 1px solid lightgray;
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+}
+
+.list-item:hover {
+    background: #25C2BA;
+    cursor: pointer;
+}
+
+.key-name {
+    margin-top: .75em;
+    margin-bottom: .75em;
+}
+
+.key-value {
+    margin-top: 0;
+    margin-bottom: .5em
+}
+
 .footer {
+    display: flex;
     background: #19827D;
+    grid-area: footer;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+.footer p {
+    font-style: italic;
+    margin-left: 1.5em;
 }
 
 /* warn against lack of browser support */

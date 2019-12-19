@@ -4,9 +4,9 @@ const e = React.createElement;
 
 function ListItem(props) {
 
-    const [visibility, setVisibility] = React.useState(true)
+    const [visibility, setVisibility] = React.useState(false)
 
-    return <li><div><p onClick={() => setVisibility(!visibility)}>{props.keyName}: </p><p style={{display: visibility ? 'block': 'none'}}>{props.value}</p></div></li>;
+    return <li><div class="list-item" onClick={() => setVisibility(!visibility)}><p class="key-name">{props.keyName}</p><p class="key-value" style={{display: visibility ? 'block': 'none'}}>{props.value}</p></div></li>;
 }
 
 class KeyList extends React.Component {
@@ -21,16 +21,16 @@ class KeyList extends React.Component {
     let displayList
     if (this.state.keyList.length > 0) {
       displayList = <ul>
-            {this.state.keyList.map((item) =>
-              <ListItem
-                key={item.keyName}
-                keyName={item.keyName}
-                value={item.value}
-              />
-            )}
+        {this.state.keyList.map((item) =>
+          <ListItem
+            key={item.keyName}
+            keyName={item.keyName}
+            value={item.value}
+          />
+        )}
       </ul>;
     } else {
-      displayList = <p>There aren't any keys stored in the memcached database</p>
+      displayList = <h4>There aren't any keys stored in the memcached database. Add keys by connecting to the memcached server on port 11211 and using the set command.</h4>
     }
 
 
