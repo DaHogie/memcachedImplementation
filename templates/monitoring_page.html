@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8">
     <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="stylesheet" href="{{ url_for('static', filename='monitoring_styles.css') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="theme-color" content="#000000">
     <title>Memcached Monitoring</title>
@@ -11,8 +12,15 @@
     <noscript>
       You need to enable JavaScript to run this app.
     </noscript>
-    <div id="root"></div>
-    <div><p>Hello there</p></div>
+    <!-- <div id="root"></div> -->
+    <section class="grid-container">
+        <div class="header">
+            <h1>Memcached Protocol Implementation Monitor</h1>
+        </div>
+        <div id="react-component" class="key-list"></div>
+        <div class="footer"></div>
+    </section>
+    <span class="nope">🚫 &nbsp; Sorry, but CSS Grid is unsupported in your browser.</span>
     <!-- Google API JavaScript Client -->
     <!--
       This HTML file is a template.
@@ -24,5 +32,25 @@
       To begin the development, run `npm start` or `yarn start`.
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
+
+    <!-- Load React. -->
+    <!-- Note: when deploying, replace "development.js" with "production.min.js". -->
+    <script src="https://unpkg.com/react@16/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@16/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+
+    <script type="text/javascript">
+        const keyValuePairs = [
+            {% for key in keys %}
+                {
+                    keyName: '{{ key.keyName }}',
+                    value: '{{ key.value }}'
+                },
+            {% endfor %}
+        ]
+    </script>
+    <!-- Load our React component. -->
+    <script type="text/babel" src="{{ url_for('static', filename='monitoring_gui.js') }}" ></script>
   </body>
 </html>

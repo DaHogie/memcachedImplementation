@@ -23,8 +23,58 @@ app.config['ENV'] = 'development'
 # a route where we will display a welcome message via an HTML template
 @app.route("/")
 def hello():
-    message = "Hello, World"
-    return render_template('monitoring_page.html', message=message)
+    keys = [
+        {
+            'keyName': 'china',
+            'value': 'great food',
+        },
+        {
+            'keyName': 'england',
+            'value': 'football'
+        },
+        {
+            'keyName': 'russia',
+            'value': 'cold'
+        },
+        {
+            'keyName': 'spain',
+            'value': 'matador'
+        },
+        {
+            'keyName': 'china',
+            'value': 'great food',
+        },
+        {
+            'keyName': 'england',
+            'value': 'football'
+        },
+        {
+            'keyName': 'russia',
+            'value': 'cold'
+        },
+        {
+            'keyName': 'spain',
+            'value': 'matador'
+        },
+        {
+            'keyName': 'china',
+            'value': 'great food',
+        },
+        {
+            'keyName': 'england',
+            'value': 'football'
+        },
+        {
+            'keyName': 'russia',
+            'value': 'cold'
+        },
+        {
+            'keyName': 'spain',
+            'value': 'matador'
+        },
+    ]
+    print(app.config['DATABASE_FILE'])
+    return render_template('monitoring_page.html', keys=keys)
 
 
 def create_connection(db_file):
@@ -77,7 +127,8 @@ def main():
 
     getAllKeys(databaseFile)
 
-    # app.run(debug=True, host='0.0.0.0', port=8000)
+    app.config['DATABASE_FILE'] = databaseFile
+    app.run(debug=True, host='0.0.0.0', port=8000)
 
 if __name__ == "__main__":
     main()

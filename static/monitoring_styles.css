@@ -1,0 +1,71 @@
+
+/* Core Styles */
+body {
+    margin: 0px;
+    overflow-y: auto;
+
+    color: white;
+
+    font-family: Avenir, sans-serif;
+    font-size: 1.1em;
+    line-height: 1.5;
+
+    text-align: center;
+
+    --header-font-size: 2.5em;
+    --content-font-size: 1em;
+}
+
+ul {
+    list-style: none;
+}
+
+li {
+    margin-bottom: 5em;
+}
+
+.grid-container {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 2fr 10fr 1fr;
+    grid-template-areas:
+        "header"
+        "key-list"
+        "footer";
+    height: 100vh;
+}
+
+.header {
+    background: #115C58;
+    grid-area: header;
+}
+
+.key-list {
+    background: #167570;
+    grid-area: key-list;
+    overflow-y: auto;
+}
+
+.footer {
+    background: #19827D;
+}
+
+/* warn against lack of browser support */
+
+.nope {
+    display: block;
+    color: white;
+    background: orange;
+    text-align: center;
+    padding: 10px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+}
+
+@supports (display: grid) {
+    .nope {
+        display: none;
+    }
+}
